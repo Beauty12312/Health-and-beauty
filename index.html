@@ -15,6 +15,7 @@
             --text-light: #e0e0e0;
             --danger-color: #ff4444;
             --success-color: #00c851;
+            --call-color: #007bff;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Tajawal', sans-serif; }
@@ -70,6 +71,7 @@
             transition: 0.3s;
         }
         .voice-btn.active { background: var(--success-color); color: #000; border-color: var(--success-color); }
+        .voice-btn.calling { background: var(--call-color); animation: ring 0.5s infinite; }
         .voice-btn.muted { background: var(--danger-color); color: #fff; border-color: var(--danger-color); text-decoration: line-through; }
 
         .chat-header { padding: 10px 15px; background: #1a1a1a; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
@@ -79,33 +81,44 @@
         .message-sender { font-size: 0.75rem; margin-bottom: 4px; font-weight: bold; }
         .message img, .message video { max-width: 100%; border-radius: 10px; margin-top: 5px; border: 1px solid #444; }
         
-        /* *** إصلاح مشغل الصوت (كبير وواضح) *** */
+        /* مشغل الصوت الواضح */
         .message audio { 
             width: 100%; 
-            min-width: 220px; /* إجبار المشغل على العرض لكي لا يختفي الزر */
+            min-width: 220px;
             margin-top: 8px; 
-            height: 50px; /* ارتفاع أكبر للضغط */
+            height: 50px;
             border-radius: 8px; 
             background-color: #f1f3f4;
             display: block;
         }
         
+        /* رسالة الاتصال الخاصة */
+        .call-message {
+            background: #004085 !important;
+            border: 1px solid #007bff;
+            text-align: center;
+        }
+
         .timer-bar { height: 3px; background: var(--primary-color); position: absolute; bottom: 0; right: 0; width: 100%; border-radius: 0 0 15px 15px; }
 
         .chat-tools { background: #1a1a1a; padding: 8px; display: flex; gap: 10px; border-top: 1px solid #333; justify-content: center; align-items: center; }
         .tool-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; filter: grayscale(1); transition: 0.3s; }
         .tool-btn:hover { filter: grayscale(0); transform: scale(1.2); }
 
-        .record-btn-container { position: relative; display: flex; align-items: center; }
-        #record-btn {
+        .chat-input-area { padding: 15px; background: #1a1a1a; display: flex; gap: 10px; align-items: center; border-radius: 0 0 10px 10px; }
+        #msg-input { flex: 1; text-align: right; background: #252525; border-radius: 25px; padding: 10px 20px; outline: none; color: #fff; border: 1px solid #333;}
+
+        /* واجهة التسجيل */
+        #recording-status { display: none; flex: 1; color: var(--danger-color); font-weight: bold; animation: pulse 1s infinite; text-align: center; }
+        #cancel-record-btn { display: none; background: none; border: none; color: #888; font-size: 1.5rem; cursor: pointer; }
+        #cancel-record-btn:hover { color: var(--danger-color); }
+
+        #record-trigger-btn {
             background: #333; color: #fff; width: 45px; height: 45px; border-radius: 50%; border: none;
             cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
             transition: 0.2s; box-shadow: 0 0 10px rgba(0,0,0,0.5);
         }
-        #record-btn.recording { background: var(--danger-color); animation: pulse 1s infinite; box-shadow: 0 0 15px var(--danger-color); }
-        
-        .chat-input-area { padding: 15px; background: #1a1a1a; display: flex; gap: 10px; align-items: center; border-radius: 0 0 10px 10px; }
-        #msg-input { flex: 1; text-align: right; background: #252525; border-radius: 25px; padding: 10px 20px; outline: none; color: #fff; border: 1px solid #333;}
+        #record-trigger-btn.active { background: var(--danger-color); }
 
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; align-items: center; justify-content: center; }
         .modal-box { background: #151515; padding: 30px; border-radius: 15px; border: 1px solid var(--primary-color); text-align: right; width: 90%; max-width: 400px; }
@@ -124,7 +137,8 @@
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        @keyframes ring { 0% { transform: rotate(0deg); } 25% { transform: rotate(10deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(-10deg); } 100% { transform: rotate(0deg); } }
     </style>
 </head>
 <body>
@@ -184,10 +198,12 @@
         </div>
 
         <div id="chat-interface">
+            <audio id="ringtone-sound" src="https://cdn.pixabay.com/download/audio/2022/03/24/audio_42f06530a7.mp3?filename=ringtone-126505.mp3" preload="auto"></audio>
+
             <div class="voice-bar">
                 <div style="color: #888; font-size: 0.9rem;" id="connection-status">متصل <span style="color:var(--success-color)">●</span></div>
                 <div class="voice-controls">
-                    <button class="voice-btn" id="btn-call" onclick="toggleCall()" title="اتصال صوتي">📞</button>
+                    <button class="voice-btn" id="btn-call" onclick="sendCallAlert()" title="تنبيه اتصال">📞</button>
                     <button class="voice-btn" id="btn-speaker" onclick="toggleSpeaker()" title="كتم الصوت (سماعة)">🔊</button>
                     <button class="voice-btn" id="btn-mic" onclick="toggleMic()" title="كتم المايك">🎤</button>
                 </div>
@@ -208,7 +224,8 @@
             </div>
 
             <div class="chat-tools">
-                <button id="record-btn" title="اضغط باستمرار للتسجيل" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording()" ontouchend="stopRecording()">🎙️</button>
+                <button id="record-trigger-btn" title="اضغط للبدء، اضغط ارسال للإنهاء" onclick="startRecordingMode()">🎙️</button>
+                
                 <button class="tool-btn" onclick="toggleEmoji()">😀</button>
                 <button class="tool-btn" onclick="triggerUpload('image')">📷</button>
                 <button class="tool-btn" onclick="triggerUpload('video')">🎥</button>
@@ -217,8 +234,11 @@
             <div id="emoji-picker"></div>
             
             <div class="chat-input-area">
+                <button id="cancel-record-btn" title="إلغاء التسجيل" onclick="cancelRecording()">🗑️</button>
+                <div id="recording-status">جاري التسجيل...</div>
+
                 <input type="text" id="msg-input" placeholder="اكتب رسالة..." disabled>
-                <button class="tool-btn" onclick="handleSendMessageClick()" style="color: var(--primary-color); filter: none;">➤</button>
+                <button class="tool-btn" id="send-btn" onclick="handleSendMessageClick()" style="color: var(--primary-color); filter: none;">➤</button>
             </div>
         </div>
     </div>
@@ -286,7 +306,7 @@
         let audioChunks = [];
         let isMicMuted = false;
         let isSpeakerMuted = false;
-        let isCallActive = false;
+        let isRecording = false; 
 
         const articlesData = {
             1: { title: "أساسيات المكياج اليومي", img: "https://images.unsplash.com/photo-1522337660859-02fbefca4702?w=800", text: "النص هنا..." },
@@ -341,52 +361,74 @@
         }
         function exitChat() { location.reload(); }
 
-        // ================= VOICE RECORDING =================
-        async function startRecording() {
+        // ================= VOICE RECORDING (PULL MODE) =================
+        async function startRecordingMode() {
             if(isMicMuted) return alert("المايك مكتوم! قم بتفعيله أولاً.");
             if (!username) return alert("سجل اسمك أولاً");
+            if (isRecording) return;
 
-            document.getElementById('record-btn').classList.add('recording');
-            audioChunks = [];
+            document.getElementById('msg-input').style.display = 'none';
+            document.getElementById('recording-status').style.display = 'block';
+            document.getElementById('cancel-record-btn').style.display = 'block';
+            document.getElementById('record-trigger-btn').classList.add('active');
             
+            audioChunks = [];
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 let options = { mimeType: 'audio/webm' };
                 if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
                     options = { mimeType: 'audio/webm;codecs=opus' };
                 }
-                
                 mediaRecorder = new MediaRecorder(stream, options);
                 mediaRecorder.ondataavailable = event => {
                     if (event.data.size > 0) audioChunks.push(event.data);
                 };
-                mediaRecorder.onstop = async () => {
-                    document.getElementById('record-btn').classList.remove('recording');
-                    const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-                    const filePath = `${Date.now()}_voice.webm`;
-                    if(supabaseClient) {
-                        const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, audioBlob);
-                        if (!error) {
-                            const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
-                            sendMessage('', 'audio', urlData.publicUrl);
-                        }
-                    }
-                    stream.getTracks().forEach(track => track.stop());
-                };
                 mediaRecorder.start();
+                isRecording = true;
             } catch (err) {
                 console.error(err);
                 alert("لا يمكن الوصول للمايكروفون");
-                document.getElementById('record-btn').classList.remove('recording');
-            }
-        }
-        function stopRecording() {
-            if (mediaRecorder && mediaRecorder.state !== "inactive") {
-                mediaRecorder.stop();
+                cancelRecording();
             }
         }
 
-        // Controls
+        function finishRecordingAndSend() {
+            if (!isRecording || !mediaRecorder) return;
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                const filePath = `${Date.now()}_voice.webm`;
+                if(supabaseClient) {
+                    const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, audioBlob);
+                    if (!error) {
+                        const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
+                        sendMessage('', 'audio', urlData.publicUrl);
+                    }
+                }
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                resetRecordingUI();
+            };
+            mediaRecorder.stop();
+        }
+
+        function cancelRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.onstop = null;
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+            resetRecordingUI();
+        }
+
+        function resetRecordingUI() {
+            isRecording = false;
+            document.getElementById('msg-input').style.display = 'block';
+            document.getElementById('recording-status').style.display = 'none';
+            document.getElementById('cancel-record-btn').style.display = 'none';
+            document.getElementById('record-trigger-btn').classList.remove('active');
+        }
+
+        // ================= CONTROLS & CALL ALERT =================
         function toggleMic() {
             isMicMuted = !isMicMuted;
             const btn = document.getElementById('btn-mic');
@@ -401,18 +443,23 @@
             if(isSpeakerMuted) { btn.classList.add('muted'); btn.innerHTML = '🔇'; } 
             else { btn.classList.remove('muted'); btn.innerHTML = '🔊'; }
         }
-        function toggleCall() {
-            isCallActive = !isCallActive;
+
+        async function sendCallAlert() {
+            if (!username) return alert("سجل اسمك أولاً");
             const btn = document.getElementById('btn-call');
-            const status = document.getElementById('connection-status');
-            if(isCallActive) { 
-                btn.classList.add('active'); 
-                status.innerHTML = 'جاري الاتصال... <span style="color:orange">●</span>';
-                setTimeout(() => status.innerHTML = 'متصل صوتياً <span style="color:var(--success-color)">●</span>', 1500);
-            } else { 
-                btn.classList.remove('active'); 
-                status.innerHTML = 'غير متصل <span style="color:red">●</span>'; 
-            }
+            btn.classList.add('active');
+            
+            // إرسال رسالة خاصة من نوع call
+            await sendMessage('📞 يطلب اتصالاً صوتياً...', 'call');
+            
+            setTimeout(() => btn.classList.remove('active'), 2000);
+        }
+
+        function playRingtone() {
+            if(isSpeakerMuted) return;
+            const tone = document.getElementById('ringtone-sound');
+            tone.currentTime = 0;
+            tone.play().catch(e => console.log("Audio play failed (interaction needed):", e));
         }
 
         // ================= MESSAGING =================
@@ -424,6 +471,15 @@
                 scrollToBottom();
             }
         }
+
+        function handleSendMessageClick() {
+            if (isRecording) {
+                finishRecordingAndSend();
+            } else {
+                sendMessage(document.getElementById('msg-input').value, 'text');
+            }
+        }
+
         async function sendMessage(content, type = 'text', finalContent = null) {
             if (!username) return;
             const text = content ? content.trim() : "";
@@ -439,12 +495,19 @@
             }
             resetInactivityTimer();
         }
+        
         function startMessageListener() {
             if(!supabaseClient) return;
             supabaseClient.channel('public:messages') 
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
                     const { sender_name, content, type, color } = payload.new;
+                    
+                    if (type === 'call' && sender_name !== username) {
+                        playRingtone(); // تشغيل الرنين عند استقبال مكالمة
+                    }
+                    
                     appendMessageToUI(sender_name, content, type, color, sender_name === username, false);
+                    
                     if(isSpeakerMuted && (type === 'audio' || type === 'video')) {
                         setTimeout(() => {
                             const media = document.querySelectorAll('audio, video');
@@ -457,19 +520,28 @@
                 })
                 .subscribe();
         }
+        
         function appendMessageToUI(sender, content, type, color, isMine, isHistory) {
             const chatBox = document.getElementById('chat-box');
             const msgDiv = document.createElement('div');
             msgDiv.className = 'message';
-            msgDiv.style.alignSelf = isMine ? 'flex-end' : 'flex-start';
-            msgDiv.style.background = isMine ? '#007bff' : '#2a2a2a';
-            msgDiv.style.borderRadius = isMine ? '15px 15px 0 15px' : '15px 15px 15px 0';
-            msgDiv.innerHTML = `<div class="message-sender" style="color:${color}">${sender}</div>`;
             
-            if (type === 'text') msgDiv.innerHTML += `<div>${content}</div>`;
-            else if (type === 'image') msgDiv.innerHTML += `<img src="${content}" onload="scrollToBottom()">`;
-            else if (type === 'video') msgDiv.innerHTML += `<video controls src="${content}" style="max-height:300px;"></video>`;
-            else if (type === 'audio') msgDiv.innerHTML += `<audio controls src="${content}"></audio>`;
+            if (type === 'call') {
+                msgDiv.classList.add('call-message');
+                msgDiv.style.alignSelf = 'center';
+                msgDiv.style.borderRadius = '20px';
+                msgDiv.innerHTML = `<div style="color:#fff; font-weight:bold;">${content}</div>`;
+            } else {
+                msgDiv.style.alignSelf = isMine ? 'flex-end' : 'flex-start';
+                msgDiv.style.background = isMine ? '#007bff' : '#2a2a2a';
+                msgDiv.style.borderRadius = isMine ? '15px 15px 0 15px' : '15px 15px 15px 0';
+                msgDiv.innerHTML = `<div class="message-sender" style="color:${color}">${sender}</div>`;
+                
+                if (type === 'text') msgDiv.innerHTML += `<div>${content}</div>`;
+                else if (type === 'image') msgDiv.innerHTML += `<img src="${content}" onload="scrollToBottom()">`;
+                else if (type === 'video') msgDiv.innerHTML += `<video controls src="${content}" style="max-height:300px;"></video>`;
+                else if (type === 'audio') msgDiv.innerHTML += `<audio controls src="${content}"></audio>`;
+            }
 
             if (appSettings.timerEnabled && !isHistory) {
                 const timerBar = document.createElement('div');
@@ -486,7 +558,6 @@
 
         // ================= UTILS =================
         function scrollToBottom() { const box = document.getElementById('chat-box'); box.scrollTop = box.scrollHeight; }
-        function handleSendMessageClick() { sendMessage(document.getElementById('msg-input').value, 'text'); }
         function triggerUpload(type) { if (!username) return alert("سجل اسمك!"); document.getElementById(`upload-${type}`).click(); }
         async function sendFile(input, type) {
             if (!input.files[0]) return;
